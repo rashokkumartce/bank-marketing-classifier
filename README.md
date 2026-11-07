@@ -27,6 +27,38 @@ The `unknown` category is present in several columns. Also, `duration` is
 known only after the call ends; any model using it is a post-call analysis
 model, not a pre-call targeting model.
 
+## Training in BITS Virtual Lab
+
+Use Python 3.12 in an isolated environment:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python train_models.py
+```
+
+The fixed 80/20 stratified split contains 32,950 training rows and 8,238 held-out
+test rows. Each saved model is a complete pipeline: standardized numeric
+features, one-hot categorical features, and the classifier. No encoder is
+fitted on test data. The training command replaces the five model files,
+`test_data.csv`, and `model_results.csv`, and creates `training_summary.json`
+with all confusion matrices, classification reports, package versions,
+baseline accuracy and reproducibility details.
+
+Logistic Regression, Decision Tree and SVM use balanced class weights.
+KNN uses 15 distance-weighted neighbors; Naive Bayes is Gaussian.
+SVM uses an RBF kernel and decision scores for AUC, avoiding the additional
+probability-calibration training cost. Its scores are not probabilities.
+Undefined positive-class precision/recall is recorded as zero when appropriate.
+The declared overall winner is the highest held-out F1, not accuracy alone.
+Hyperparameters are fixed, not tuned using the held-out test set.
+
+Training may take several minutes, especially SVM. Keep the terminal open
+until all five result rows and the save confirmation appear. Do not run the
+old application with the new pipelines: its preprocessing must be corrected
+next. Commit the models generated in the lab for deployment; do not commit
+the raw `data/` directory or virtual environment.
+
 ## Project Overview
 
 This project implements a comprehensive machine learning solution for binary classification on the Bank Marketing dataset. The project demonstrates the development, evaluation, and deployment of five different classification algorithms with interactive web-based prediction capabilities.
