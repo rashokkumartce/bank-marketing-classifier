@@ -1,447 +1,248 @@
-# 🏦 Bank Marketing Classification Model
+# Bank Campaign Model Lab
 
-> **Correction in progress:** The previous dataset and saved models use synthetic
-> data, not UCI data. The results and completion statements below are obsolete
-> and must not be used for submission until retraining and application fixes
-> are complete.
+BITS Pilani WILP M.Tech (AIML), Machine Learning Assignment 2.
+Deadline: **8 November 2026, 23:59 IST**. Total: **15 marks**.
 
-## Downloading the genuine dataset
+Development and local validation are complete. Live deployment, final BITS lab
+execution evidence and the single submission PDF remain to be completed.
+Earlier synthetic data and its model results have been replaced. Current saved
+artifacts were regenerated locally; their provenance is recorded in
+[training_summary.json](training_summary.json). They must not be represented as
+the artifacts from the final lab execution.
 
-Run in the activated Python environment on BITS Virtual Lab:
+## a. Problem statement
+
+Predict whether a customer subscribed to a term deposit (`y = yes/no`) from a
+Portuguese bank's marketing-campaign records. Compare five classifiers using
+the same held-out data and demonstrate their performance in Streamlit.
+
+This is **post-call analysis**: `duration` is only known after a call ends.
+Including it is unsuitable for pre-call targeting. These models are coursework
+demonstrations, not a validated production marketing system.
+
+## b. Dataset description
+
+- Source: [UCI Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing).
+- Variant: `bank-additional-full.csv`, from the official downloadable archive.
+- Instances: **41,188**; input features: **20**; target: `y`.
+- Target distribution: **36,548 no (88.73%)**, **4,640 yes (11.27%)**.
+- Ten numeric and ten categorical features.
+- No empty CSV values in the downloaded file. Several categories contain
+  `unknown`, which is retained as an explicit category, not a missing value.
+- `pdays = 999` indicates no previous contact; it is retained as provided.
+- Deterministic 80/20 stratified split, seed 42: **32,950 training** and
+  **8,238 test** rows (7,310 no; 928 yes).
+- Every row of [test_data.csv](test_data.csv) belongs to the held-out split.
+  Training data is downloaded locally into ignored `data/`, not uploaded to the app.
+
+| Feature | Type | Meaning |
+|---|---|---|
+| age | Numeric | Customer age |
+| job | Categorical | Job type |
+| marital | Categorical | Marital status |
+| education | Categorical | Education level |
+| default | Categorical | Credit in default |
+| housing | Categorical | Housing loan |
+| loan | Categorical | Personal loan |
+| contact | Categorical | Communication type |
+| month | Categorical | Last contact month |
+| day_of_week | Categorical | Last contact weekday |
+| duration | Numeric | Last call duration in seconds; post-call only |
+| campaign | Numeric | Contacts during this campaign |
+| pdays | Numeric | Days since previous contact (999: not previously contacted) |
+| previous | Numeric | Previous campaign contacts |
+| poutcome | Categorical | Previous campaign outcome |
+| emp.var.rate | Numeric | Employment variation rate |
+| cons.price.idx | Numeric | Consumer price index |
+| cons.conf.idx | Numeric | Consumer confidence index |
+| euribor3m | Numeric | Euribor three-month rate |
+| nr.employed | Numeric | Number of employees indicator |
+
+## c. GitHub repository link
+
+[https://github.com/rashokkumartce/bank-marketing-classifier](https://github.com/rashokkumartce/bank-marketing-classifier)
+
+**Live Streamlit link:** pending deployment. Replace this text with the actual
+tested `https://...streamlit.app` URL before submission.
+
+## d. Models used and evaluation
+
+Each model is saved as a complete scikit-learn pipeline. Numeric features use
+`StandardScaler`; categorical features use dense one-hot encoding with
+`handle_unknown="ignore"`. All preprocessing is fitted **only on training rows**.
+Neither the app nor the test evaluation fits encoders or retrains classifiers.
+
+| Model | Fixed configuration |
+|---|---|
+| Logistic Regression | `max_iter=2000`, balanced class weights, seed 42 |
+| Decision Tree | Depth 8, minimum 20 samples per leaf, balanced weights, seed 42 |
+| KNN | 15 neighbors, distance-weighted voting |
+| Naive Bayes | GaussianNB defaults |
+| Support Vector Machine | RBF kernel, balanced weights, `probability=False`, seed 42 |
+
+Hyperparameters were fixed before evaluation; the held-out test data was not
+used for tuning. Gaussian NB is used because it accepts the continuous scaled
+features. SVM uses decision-function scores for ROC AUC, not probabilities.
+
+### Comparison table
+
+Results on all 8,238 held-out rows; rounded to four decimal places. Full
+precision values are in [model_results.csv](model_results.csv).
+
+| ML Model Name | Accuracy | AUC | Precision | Recall | F1 | MCC |
+|---|---:|---:|---:|---:|---:|---:|
+| Logistic Regression | 0.8651 | 0.9438 | 0.4512 | 0.9116 | 0.6036 | 0.5813 |
+| Decision Tree | 0.8562 | 0.9452 | 0.4344 | 0.9170 | 0.5895 | 0.5684 |
+| KNN | 0.9101 | 0.9216 | 0.6667 | 0.4030 | 0.5024 | 0.4737 |
+| Naive Bayes | 0.8203 | 0.8393 | 0.3495 | 0.6907 | 0.4642 | 0.4009 |
+| Support Vector Machine | 0.8507 | 0.9417 | 0.4263 | 0.9418 | 0.5870 | 0.5711 |
+
+Accuracy is the fraction of correct predictions. AUC measures ranking quality.
+Precision, recall and F1 use **yes as the positive class**. MCC uses all four
+confusion-matrix cells and ranges from -1 to 1.
+The always-no baseline has **0.8874 accuracy** but zero positive recall and F1.
+This makes accuracy alone a poor criterion for subscription detection.
+
+### Observations
+
+| ML Model Name | Observation about model performance |
+|---|---|
+| Logistic Regression | Highest F1 (0.6036) and MCC (0.5813), with 91.16% positive recall. Balanced weights improve subscription detection at the cost of false positives; precision is 45.12%. |
+| Decision Tree | Highest AUC (0.9452); recall is 91.70%. Its depth/leaf constraints provide a regularized tree, but positive F1 is below Logistic Regression. |
+| KNN | Highest accuracy (91.01%) and precision (66.67%), but only 40.30% recall: many subscribers are missed. Scaling is essential for distance-based classification. |
+| Naive Bayes | Lowest AUC, F1 and MCC in this comparison. Correlated economic variables and Gaussian/conditional-independence assumptions are plausible limitations, not proven causes. |
+| Support Vector Machine | Highest positive recall (94.18%); lower precision (42.63%) and F1 than Logistic Regression. Decision scores allow AUC without probability calibration. |
+| Overall winner for this dataset | **Logistic Regression**, using held-out F1 as the declared primary criterion; it also has the highest MCC. KNN would be preferred if positive precision were the primary criterion. |
+
+### Limitations
+
+- Random stratified splitting is a coursework comparison; it does not estimate
+  performance on future campaigns. A time-based evaluation would be needed.
+- Call duration is unavailable before a call. Remove it and retrain for pre-call use.
+- One-hot encoding does not eliminate correlated-feature effects.
+- No cross-validation, threshold optimization, or confidence intervals are claimed.
+- Platform differences may alter the last decimal places. After final lab
+  training, update this table and observations if the rounded values change.
+
+## Repository structure
+
+```text
+app.py                       # Streamlit UI; no model fitting
+download_data.py             # Official UCI downloader with checks
+train_models.py              # Reproducible training and artifact export
+evaluation.py                # Shared CSV validation and six metrics
+test_project.py              # Regression and Streamlit interaction tests
+requirements.txt             # Version-pinned runtime dependencies
+README.md
+test_data.csv                # Labeled held-out test rows
+model_results.csv
+training_summary.json        # Provenance and evaluation diagnostics
+model/                       # Five compressed pipelines (.joblib)
+.streamlit/config.toml
+.gitignore
+```
+
+## Setup, retraining and running
+
+Use **Python 3.12** for the final lab run and Streamlit deployment. Local
+validation also ran on Python 3.9.6 with the same pinned packages.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip check
+```
+
+On Windows, activate using `.venv\Scripts\Activate.ps1`.
+Do not install into a shared lab environment if activation fails.
+
+The saved artifacts already allow the app to run:
+
+```bash
+python -m streamlit run app.py
+```
+
+To regenerate the entire experiment:
 
 ```bash
 python download_data.py
-```
-
-The script downloads the official [UCI Bank Marketing archive](https://archive.ics.uci.edu/dataset/222/bank+marketing),
-selects `bank-additional-full.csv`, validates 41,188 rows and 20 input features,
-and saves a comma-separated copy to `data/bank_additional_full.csv`.
-The target is `y`: 36,548 `no` and 4,640 `yes` values.
-Raw training data is excluded from Git; a held-out test CSV will be generated
-by the corrected training script. This download needs only Python's standard library.
-Errors stop execution; no synthetic fallback is used.
-
-This variant differs from the earlier synthetic schema: it has `day_of_week`
-and does not have `balance` or `day`. Existing models cannot be reused.
-The `unknown` category is present in several columns. Also, `duration` is
-known only after the call ends; any model using it is a post-call analysis
-model, not a pre-call targeting model.
-
-## Training in BITS Virtual Lab
-
-Use Python 3.12 in an isolated environment:
-
-```bash
-source .venv/bin/activate
-python -m pip install -r requirements.txt
 python train_models.py
+python -m unittest -v test_project
 ```
 
-The fixed 80/20 stratified split contains 32,950 training rows and 8,238 held-out
-test rows. Each saved model is a complete pipeline: standardized numeric
-features, one-hot categorical features, and the classifier. No encoder is
-fitted on test data. The training command replaces the five model files,
-`test_data.csv`, and `model_results.csv`, and creates `training_summary.json`
-with all confusion matrices, classification reports, package versions,
-baseline accuracy and reproducibility details.
-
-Logistic Regression, Decision Tree and SVM use balanced class weights.
-KNN uses 15 distance-weighted neighbors; Naive Bayes is Gaussian.
-SVM uses an RBF kernel and decision scores for AUC, avoiding the additional
-probability-calibration training cost. Its scores are not probabilities.
-Undefined positive-class precision/recall is recorded as zero when appropriate.
-The declared overall winner is the highest held-out F1, not accuracy alone.
-Hyperparameters are fixed, not tuned using the held-out test set.
-
-Training may take several minutes, especially SVM. Keep the terminal open
-until all five result rows and the save confirmation appear. Do not run the
-old application with the new pipelines: its preprocessing must be corrected
-next. Commit the models generated in the lab for deployment; do not commit
-the raw `data/` directory or virtual environment.
-
-## Project Overview
-
-This project implements a comprehensive machine learning solution for binary classification on the Bank Marketing dataset. The project demonstrates the development, evaluation, and deployment of five different classification algorithms with interactive web-based prediction capabilities.
-
-**Assignment:** BITS Pilani M.Tech AIML - Machine Learning (15 marks)  
-**Deadline:** November 8, 2026
-
----
-
-## 📋 Problem Statement
-
-The objective is to build and compare multiple classification models to predict whether a bank customer will subscribe to a term deposit based on marketing campaign data. This is a binary classification problem (`y: yes/no`) requiring rigorous model evaluation and interactive deployment.
-
-**Key Challenge:** Imbalanced dataset with ~87% negative class and ~13% positive class, requiring careful metric selection beyond accuracy.
-
----
-
-## 📊 Dataset Description
-
-### Source
-**Bank Marketing Dataset** from UCI Machine Learning Repository
-
-### Dataset Characteristics
-- **Total Instances:** 5,000 samples
-- **Total Features:** 20 (12+ as per requirement ✅)
-- **Target Variable:** `y` (Binary: yes/no)
-- **Class Distribution:** 
-  - No: 4,372 (87.44%)
-  - Yes: 628 (12.56%)
-- **Feature Types:** Numeric and Categorical
-- **Missing Values:** None (0 missing data points)
-
-### Features (20 columns)
-
-| # | Feature Name | Type | Description | Values/Range |
-|---|---|---|---|---|
-| 1 | age | Numeric | Customer age | 18-95 years |
-| 2 | job | Categorical | Type of job | 12 categories |
-| 3 | marital | Categorical | Marital status | married, single, divorced, unknown |
-| 4 | education | Categorical | Education level | primary, secondary, tertiary, unknown |
-| 5 | default | Categorical | Credit in default? | yes, no, unknown |
-| 6 | balance | Numeric | Annual balance (€) | -8000 to 250000 |
-| 7 | housing | Categorical | Has housing loan? | yes, no, unknown |
-| 8 | loan | Categorical | Has personal loan? | yes, no, unknown |
-| 9 | contact | Categorical | Contact communication type | cellular, telephone, unknown |
-| 10 | day | Numeric | Day of month | 1-31 |
-| 11 | month | Categorical | Month of year | jan, feb, ..., dec |
-| 12 | duration | Numeric | Call duration (seconds) | 0-4918 |
-| 13 | campaign | Numeric | Number of contacts during campaign | 1-56 |
-| 14 | pdays | Numeric | Days since previous contact | -1 to 999 |
-| 15 | previous | Numeric | Number of previous contacts | 0-7 |
-| 16 | poutcome | Categorical | Outcome of previous campaign | failure, nonexistent, success |
-| 17 | emp.var.rate | Numeric | Employment variation rate | -3.4 to 1.1 |
-| 18 | cons.price.idx | Numeric | Consumer price index | 93.0 to 94.8 |
-| 19 | cons.conf.idx | Numeric | Consumer confidence index | -50 to -26 |
-| 20 | euribor3m | Numeric | Euribor 3-month rate | -0.4 to 5.0 |
-| 21 | nr.employed | Numeric | Number of employees | 4963 to 5228 |
-
----
-
-## 🤖 Classification Models
-
-### Models Implemented
-
-Five distinct classification algorithms were trained and evaluated:
-
-1. **Logistic Regression** - Linear probabilistic model
-2. **Decision Tree** - Tree-based decision model
-3. **K-Nearest Neighbors (KNN)** - Instance-based learning
-4. **Naive Bayes** - Probabilistic classifier
-5. **Support Vector Machine (SVM)** - Kernel-based classifier
-
-### Model Performance Comparison
-
-| Model | Accuracy | AUC Score | Precision | Recall | F1 Score | MCC |
-|-------|----------|-----------|-----------|--------|----------|-----|
-| **Logistic Regression** | **0.8740** | 0.5061 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
-| Decision Tree | 0.8600 | 0.4582 | 0.0625 | 0.0079 | 0.0141 | -0.0244 |
-| KNN | 0.8630 | 0.4906 | 0.2105 | 0.0317 | 0.0552 | 0.0354 |
-| Naive Bayes | 0.8740 | 0.5212 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
-| SVM | 0.8740 | 0.4689 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
-
----
-
-## 📈 Evaluation Metrics
-
-Six comprehensive evaluation metrics were calculated for each model:
-
-### 1. **Accuracy**
-- Definition: Proportion of correct predictions among total predictions
-- Formula: (TP + TN) / (TP + TN + FP + FN)
-- Best for: Balanced datasets
-- Our dataset: Imbalanced, so accuracy alone is misleading
-
-### 2. **AUC Score (Area Under ROC Curve)**
-- Definition: Probability that classifier ranks random positive instance higher than random negative
-- Range: 0.0 to 1.0 (higher is better, 0.5 is random)
-- Best for: Imbalanced classification problems
-- Interpretation: Our best model (Naive Bayes) = 0.5212
-
-### 3. **Precision**
-- Definition: TP / (TP + FP) - Of predicted positives, how many are correct?
-- Best for: When false positives are costly
-- Our results: Low precision due to class imbalance
-
-### 4. **Recall (Sensitivity)**
-- Definition: TP / (TP + FN) - Of actual positives, how many did we find?
-- Best for: When false negatives are costly
-- Our results: Low recall due to class imbalance
-
-### 5. **F1 Score**
-- Definition: Harmonic mean of Precision and Recall = 2 × (Precision × Recall) / (Precision + Recall)
-- Best for: Imbalanced datasets, balancing precision-recall tradeoff
-- Range: 0.0 to 1.0
-
-### 6. **Matthews Correlation Coefficient (MCC)**
-- Definition: Correlation coefficient between predicted and actual values
-- Formula: (TP × TN - FP × FN) / √[(TP+FP)(TP+FN)(TN+FP)(TN+FN)]
-- Range: -1 to +1 (accounts for all confusion matrix elements)
-- Best for: Imbalanced classification problems
-- Interpretation: Better than accuracy for imbalanced data
-
----
-
-## 🏆 Winner Model Analysis
-
-### Selected Model: **Logistic Regression**
-
-#### Why Logistic Regression?
-1. **Highest Accuracy:** 87.40% - correctly predicts overall outcomes
-2. **Competitive AUC:** 0.5061 - reasonable discrimination ability
-3. **Interpretability:** Coefficient-based, easy to explain decisions
-4. **Computational Efficiency:** Fast training and prediction
-5. **Production Ready:** Low memory footprint, ideal for deployment
-
-#### Model Characteristics
-- **Algorithm Type:** Linear probabilistic model
-- **Training Time:** <1 second
-- **Prediction Time:** <1ms per instance
-- **Interpretability Score:** Very High (each feature has interpretable weight)
-- **Robustness:** Stable across different random seeds
-
----
-
-## 💡 Key Observations
-
-### 1. Class Imbalance Impact
-- Dataset is heavily imbalanced (87.44% negative, 12.56% positive)
-- All models default to predicting the majority class (No)
-- This explains low precision and recall values across all models
-- **Solution for production:** Apply class weights, resampling, or threshold tuning
-
-### 2. Model Behavior
-- **Logistic Regression, Naive Bayes, SVM:** Conservative - rarely predict "Yes"
-- **Decision Tree:** Slightly better recall but still limited
-- **KNN:** Best balance with highest precision (21.05%)
-
-### 3. Metric Trade-offs
-- **Accuracy-focused models:** High on accuracy but fail minority class detection
-- **F1-focused models:** Requires balancing precision and recall
-- **AUC-focused models:** Better at discrimination despite imbalance
-
-### 4. Recommendations for Production
-1. Rebalance training data using SMOTE or class weights
-2. Tune decision thresholds based on business cost of false positives vs false negatives
-3. Use ensemble methods combining multiple models
-4. Implement cross-validation with stratified folds
-
----
-
-## 📁 Project Structure
-
-```
-ml_assignment/
-├── app.py                          # Streamlit web application
-├── requirements.txt                # Python dependencies
-├── README.md                       # This documentation
-├── bank_marketing_full.csv         # Full training dataset (5,000 samples)
-├── test_data.csv                   # Test dataset for Streamlit (50 samples)
-├── model_results.csv               # Model performance metrics
-├── train_models.py                 # Model training script
-└── model/
-    ├── logistic_regression.joblib  # Trained Logistic Regression model
-    ├── decision_tree.joblib        # Trained Decision Tree model
-    ├── knn.joblib                  # Trained KNN model
-    ├── naive_bayes.joblib          # Trained Naive Bayes model
-    └── svm.joblib                  # Trained SVM model
-```
-
----
-
-## 🚀 Installation & Setup
-
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
-
-### Step 1: Clone Repository
-```bash
-git clone <repository-url>
-cd ml_assignment
-```
-
-### Step 2: Create Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-### Step 3: Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### Step 4: Run Streamlit Application
-```bash
-streamlit run app.py
-```
-
-The application will open in your default browser at `http://localhost:8501`
-
----
-
-## 🎯 Application Features
-
-### Feature 1: 📊 Model Metrics Tab
-- Display all 6 evaluation metrics for selected model
-- Visual metric cards with performance summary
-- Comparison with other models
-
-### Feature 2: 🔮 Make Predictions Tab
-- **Manual Input Mode:** Enter individual customer data and get predictions
-- **CSV Upload Mode:** Upload CSV file with multiple instances for batch predictions
-- Real-time probability calculations
-- Confidence scores display
-
-### Feature 3: 📈 Model Comparison Tab
-- Tabular comparison of all 5 models
-- Bar charts comparing accuracy and F1 scores
-- Best model identification metrics
-- Performance insights and recommendations
-
-### Feature 4: Interactive Model Selection
-- Dropdown menu to select any of the 5 trained models
-- Instant model switching
-- All predictions update with selected model
-
----
-
-## 📦 Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| streamlit | 1.28.1 | Web application framework |
-| pandas | 2.0.3 | Data manipulation and analysis |
-| numpy | 1.24.3 | Numerical computing |
-| scikit-learn | 1.3.0 | Machine learning algorithms |
-| matplotlib | 3.7.2 | Static visualization |
-| seaborn | 0.12.2 | Statistical visualization |
-| joblib | 1.3.1 | Model serialization |
-
----
-
-## 🔄 Training the Models
-
-To retrain models with the full dataset:
-
-```bash
-python train_models.py
-```
-
-This will:
-1. Load the full bank marketing dataset
-2. Preprocess and split data (80% train, 20% test)
-3. Train all 5 models
-4. Calculate all 6 metrics for each model
-5. Save trained models to `model/` directory
-6. Export results to `model_results.csv`
-
----
-
-## 📊 Data Split Strategy
-
-- **Training Set:** 4,000 samples (80%)
-- **Test Set:** 1,000 samples (20%)
-- **Stratified Split:** Maintains class distribution in both sets
-- **Random Seed:** 42 (for reproducibility)
-
----
-
-## 🌐 Streamlit Community Cloud Deployment
-
-### Deployment Steps:
-
-1. **Push to GitHub:**
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial ML assignment commit"
-   git push origin main
-   ```
-
-2. **Deploy on Streamlit Cloud:**
-   - Go to [share.streamlit.io](https://share.streamlit.io)
-   - Connect your GitHub account
-   - Select this repository
-   - Deploy with main branch, app file: `app.py`
-
-3. **Access Deployed App:**
-   - App will be available at: `https://share.streamlit.io/your-username/your-repo/main/app.py`
-
-### Important Notes for Deployment:
-- ✅ Only `test_data.csv` is uploaded (small 50-sample file)
-- ✅ Full training data stays in repository for transparency
-- ✅ All 5 models are included (< 1MB total)
-- ✅ Free tier has limited resources, suitable for demonstration
-
----
-
-## ✅ Requirements Fulfillment Checklist
-
-- ✅ **5 Classification Models:** Logistic Regression, Decision Tree, KNN, Naive Bayes, SVM
-- ✅ **6 Evaluation Metrics:** Accuracy, AUC Score, Precision, Recall, F1 Score, MCC
-- ✅ **Dataset Quality:** 5,000 instances × 20 features (exceeds 12+ requirement)
-- ✅ **Streamlit App:** 4 interactive features implemented
-- ✅ **GitHub Repository:** Proper structure with documentation
-- ✅ **Model Comparison:** Detailed table with insights
-- ✅ **Deployment Ready:** Streamlit Community Cloud compatible
-
----
-
-## 📝 Academic Integrity
-
-This project is submitted as individual work for BITS Pilani M.Tech AIML assignment. All code is original and developed following course guidelines. The dataset is publicly available, and all models use standard scikit-learn implementations.
-
----
-
-## 🔗 References & Resources
-
-1. **UCI Machine Learning Repository:** [Bank Marketing Dataset](https://archive.ics.uci.edu/ml/datasets/bank+marketing)
-2. **Scikit-learn Documentation:** https://scikit-learn.org/
-3. **Streamlit Documentation:** https://docs.streamlit.io/
-4. **ROC-AUC Guide:** https://en.wikipedia.org/wiki/Receiver_operating_characteristic
-5. **Handling Imbalanced Data:** https://imbalanced-learn.org/
-
----
-
-## 📞 Assignment Submission Details
-
-- **Institution:** BITS Pilani, Hyderabad Campus
-- **Program:** M.Tech AIML (Integrated Learning Program for Working Professionals)
-- **Assignment Code:** ML - Classification Models
-- **Total Marks:** 15
-  - 10 marks: Models & GitHub Repository
-  - 4 marks: Streamlit Web Application
-  - 1 mark: BITS Virtual Lab Execution Screenshot
-- **Deadline:** November 8, 2026, 23:59 IST
-- **Submission Format:** GitHub link + Streamlit Cloud link + PDF documentation
-
----
-
-## 📄 Appendix: Confusion Matrix Analysis
-
-For each model on test set (1,000 samples):
-
-```
-True Positives (TP):   Correctly predicted "Yes" customers
-True Negatives (TN):   Correctly predicted "No" customers
-False Positives (FP):  Incorrectly predicted "Yes" (cost: unnecessary marketing)
-False Negatives (FN):  Incorrectly predicted "No" (cost: missed opportunities)
-
-All models show:
-- High TN (correct "No" predictions due to class imbalance)
-- Low TP (struggling to identify "Yes" customers)
-- Very low FN and FP (overly conservative predictions)
-```
-
----
-
-**Last Updated:** November 7, 2026  
-**Status:** ✅ Complete and Ready for Submission  
-**Deployment Status:** ✅ Streamlit Community Cloud Ready
-
----
-
-*This README serves as comprehensive documentation for the Bank Marketing Classification project demonstrating machine learning fundamentals, model evaluation, and web application deployment.*
+Training replaces the five pipelines, test CSV, metrics CSV and summary JSON.
+It prints all six metrics and verifies predictions after serialization.
+Failures are explicit; downloading never substitutes synthetic data.
+The raw archive's CSV hash is printed by the downloader. The normalized
+comma-separated dataset hash and package versions are recorded in the summary.
+Only load trusted, repository-generated joblib files; pickle-based model
+formats must not be accepted from user uploads.
+
+## Streamlit features and upload contract
+
+1. **CSV upload:** choose "Upload test CSV", or use the included held-out file.
+2. **Model dropdown:** select any of the five saved classifiers.
+3. **Six metrics:** recalculated on the current test CSV, not copied from the
+   training results table.
+4. **Confusion matrix and classification report:** actual rows, predicted
+   columns; fixed label order no/yes.
+5. **All-five comparison:** same current CSV, table and precision/recall/F1 chart.
+6. Downloads for the test CSV and current evaluation metrics.
+
+CSV must be UTF-8 (optional BOM), comma-separated, and contain exactly the
+20 features listed above plus target `y`. Column order may differ. Missing,
+duplicate or extra columns, malformed rows, blank fields, invalid numeric
+values and invalid targets are rejected with visible errors.
+Targets are normalized to lowercase no/yes. Up to **10 MiB and 10,000 rows**
+are supported for this demonstration.
+
+The saved encoder handles previously unseen categories as all-zero vectors;
+the app explicitly warns about affected columns. SVM scores are not displayed
+as probabilities. AUC is **N/A** for a single-class CSV, with a warning.
+Undefined precision/recall/F1 is recorded as zero, with warnings when positive
+predictions or positive examples are absent. Preview predictions are limited
+to 100 rows; metrics and comparison use every test row.
+MCC follows scikit-learn's zero convention when its denominator is zero.
+
+### Development validation
+
+Fourteen regression tests cover all five models, serialized artifact metrics,
+train/test separation, unseen categories, single-class AUC, CSV errors,
+model switching and actual uploaded-data evaluation. All passed locally with
+runtime numerical warnings treated as errors. `pip check` passed.
+An actual browser CSV upload and all-five comparison were also exercised.
+These are local checks, not a claim that live deployment or final lab evidence
+is complete. The corrected NumPy pin is 1.26.4; NumPy 2.0.2 produced numerical
+warnings on the local macOS runtime, so artifacts were regenerated with 1.26.4.
+
+## Deployment and submission
+
+Follow [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) and
+[SUBMISSION_CHECKLIST.md](SUBMISSION_CHECKLIST.md).
+Deploy `app.py` from the main branch on Streamlit Community Cloud, selecting
+Python 3.12. The cloud app loads artifacts; it does not download training data
+or train on startup.
+
+The final assignment must be performed in BITS Virtual Lab. Capture **one
+genuine screenshot** of assignment execution. The final submission is **one
+PDF**, in this order:
+
+1. Clickable GitHub repository link.
+2. Clickable live Streamlit Community Cloud link.
+3. BITS Virtual Lab execution screenshot.
+4. The required README content itself, including both tables, not just excerpts
+   or a README link.
+
+## Academic integrity and references
+
+The dataset is public UCI data; algorithms are standard scikit-learn
+implementations. Development used AI assistance. Review and understand the
+code, follow course rules about permitted assistance, and disclose assistance
+where required. Do not claim unaided authorship or fabricate execution proof.
+Commit history and UI/model originality may be checked. No grade is guaranteed.
+
+- [UCI Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing)
+- [scikit-learn pipelines](https://scikit-learn.org/stable/modules/compose.html)
+- [scikit-learn classification metrics](https://scikit-learn.org/stable/modules/model_evaluation.html)
+- [Streamlit Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud)

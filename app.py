@@ -1,290 +1,194 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
+"""Interactive evaluation of saved Bank Marketing classifiers; never trains."""
+
+import csv
+import json
+from pathlib import Path
+
 import joblib
-import os
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import confusion_matrix, classification_report
 import matplotlib.pyplot as plt
-import seaborn as sns
-import warnings
-warnings.filterwarnings('ignore')
+import pandas as pd
+import sklearn
+import streamlit as st
 
-# Configure Streamlit page
-st.set_page_config(
-    page_title="Bank Marketing Classifier",
-    page_icon="🏦",
-    layout="wide",
-    initial_sidebar_state="expanded"
+from download_data import FEATURES
+from evaluation import CATEGORICAL_FEATURES, MODEL_FILES, evaluate_model, read_test_csv
+
+
+ROOT = Path(__file__).resolve().parent
+st.set_page_config(page_title="Bank Campaign Model Lab", page_icon="🏦", layout="wide")
+st.title("Bank Campaign Model Lab")
+st.caption("Compare five classifiers on labeled, held-out customer records.")
+st.info(
+    "Post-call analysis only: call duration is included and is unavailable before a call. "
+    "Uploaded data is evaluated with saved pipelines; no training occurs in this app."
 )
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .main {
-        padding: 2rem;
-    }
-    .metric-box {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
-st.title("🏦 Bank Marketing Classification Model")
-st.markdown("### Predict Customer Response to Marketing Campaign")
-st.divider()
-
-# Sidebar - Model Selection
-st.sidebar.title("⚙️ Configuration")
-st.sidebar.divider()
-
-# Load model results
-model_results = pd.read_csv('model_results.csv')
-model_names = model_results['Model'].tolist()
-
-selected_model = st.sidebar.selectbox(
-    "🤖 Select Classification Model",
-    options=model_names,
-    help="Choose which trained model to use for predictions"
-)
-
-st.sidebar.divider()
-
-# Load the selected model
 @st.cache_resource
-def load_model(model_name):
-    model_path = f"model/{model_name.lower().replace(' ', '_')}.joblib"
-    return joblib.load(model_path)
+def load_model(name: str, fingerprint):
+    model = joblib.load(ROOT / "model" / MODEL_FILES[name])
+    if list(model.feature_names_in_) != FEATURES or list(model.classes_) != [0, 1]:
+        raise ValueError(f"{name} has an incompatible schema. Retrain with train_models.py.")
+    return model
 
-model = load_model(selected_model)
 
-# Load feature encoders
-def get_feature_encoders():
-    """Get encoders for categorical features"""
-    encoders = {}
-    categorical_features = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'poutcome']
-    return categorical_features
+@st.cache_data
+def evaluate_saved_model(name: str, contents: bytes, fingerprint):
+    data = read_test_csv(contents)
+    model = load_model(name, fingerprint)
+    metrics, diagnostics = evaluate_model(
+        model, data[FEATURES], data["y"].map({"no": 0, "yes": 1}),
+    )
+    return metrics, diagnostics
 
-categorical_features = get_feature_encoders()
 
-# Main content area
-tab1, tab2, tab3 = st.tabs(["📊 Model Metrics", "🔮 Make Predictions", "📈 Model Comparison"])
+try:
+    summary = json.loads((ROOT / "training_summary.json").read_text(encoding="utf-8"))
+    if summary["package_versions"]["scikit-learn"] != sklearn.__version__:
+        raise ValueError("scikit-learn differs from the training environment. Install requirements.txt.")
+    fingerprint = tuple(
+        ((ROOT / "model" / filename).stat().st_mtime_ns,
+         (ROOT / "model" / filename).stat().st_size)
+        for filename in MODEL_FILES.values()
+    )
+    sample_contents = (ROOT / "test_data.csv").read_bytes()
+except (OSError, ValueError, KeyError) as error:
+    st.error(f"Required model artifacts are missing or incompatible: {error}")
+    st.stop()
 
-# TAB 1: Model Metrics
-with tab1:
-    st.header("Model Performance Metrics")
-    
-    # Get selected model metrics
-    selected_metrics = model_results[model_results['Model'] == selected_model].iloc[0]
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Accuracy", f"{selected_metrics['Accuracy']:.4f}")
-    with col2:
-        st.metric("AUC Score", f"{selected_metrics['AUC Score']:.4f}")
-    with col3:
-        st.metric("Precision", f"{selected_metrics['Precision']:.4f}")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Recall", f"{selected_metrics['Recall']:.4f}")
-    with col2:
-        st.metric("F1 Score", f"{selected_metrics['F1 Score']:.4f}")
-    with col3:
-        st.metric("MCC", f"{selected_metrics['MCC']:.4f}")
-    
-    st.divider()
-    st.info(f"📌 **Selected Model:** {selected_model}")
-    st.success(f"✅ **Accuracy:** {selected_metrics['Accuracy']:.2%} of predictions are correct")
+selected_model = st.sidebar.selectbox("Classification model", list(MODEL_FILES))
+st.sidebar.markdown("### Evaluation settings")
+st.sidebar.caption("Positive class: yes (subscribed). Decision thresholds are fixed by each model.")
+source = st.radio("Test dataset", ["Included held-out test CSV", "Upload test CSV"])
+st.download_button(
+    "Download held-out test CSV", sample_contents, "test_data.csv", mime="text/csv",
+)
+if source == "Upload test CSV":
+    upload = st.file_uploader("Upload labeled test data (CSV)", type=["csv"])
+    if upload is None:
+        st.info("Upload a CSV containing all 20 input features and target 'y' (no/yes).")
+        st.stop()
+    contents = upload.getvalue()
+else:
+    contents = sample_contents
 
-# TAB 2: Make Predictions
-with tab2:
-    st.header("Make Predictions")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.subheader("Input Options")
-        input_method = st.radio(
-            "How would you like to input data?",
-            ["📝 Manual Input", "📤 Upload CSV"],
-            help="Choose between entering data manually or uploading a CSV file"
-        )
-    
-    # Initialize test data
-    test_data = pd.read_csv('test_data.csv')
-    
-    if input_method == "📤 Upload CSV":
-        st.subheader("Upload CSV File")
-        uploaded_file = st.file_uploader(
-            "Choose a CSV file",
-            type="csv",
-            help="CSV should contain all required features for prediction"
-        )
-        
-        if uploaded_file is not None:
-            input_df = pd.read_csv(uploaded_file)
-            st.write(f"✅ Uploaded {len(input_df)} rows")
-            
-            if st.button("🔮 Generate Predictions", key="predict_csv"):
-                try:
-                    # Encode categorical variables
-                    input_df_encoded = input_df.copy()
-                    
-                    categorical_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'poutcome']
-                    for col in categorical_cols:
-                        if col in input_df_encoded.columns:
-                            le = LabelEncoder()
-                            input_df_encoded[col] = le.fit_transform(input_df_encoded[col])
-                    
-                    # Make predictions
-                    predictions = model.predict(input_df_encoded)
-                    probabilities = model.predict_proba(input_df_encoded)
-                    
-                    # Display results
-                    results_df = pd.DataFrame({
-                        'Prediction': ['Yes' if p == 1 else 'No' for p in predictions],
-                        'Probability_No': probabilities[:, 0],
-                        'Probability_Yes': probabilities[:, 1]
-                    })
-                    
-                    st.subheader("Prediction Results")
-                    st.dataframe(results_df, use_container_width=True)
-                    
-                    # Summary statistics
-                    yes_count = (predictions == 1).sum()
-                    no_count = (predictions == 0).sum()
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Predicted 'Yes'", yes_count)
-                    with col2:
-                        st.metric("Predicted 'No'", no_count)
-                    
-                except Exception as e:
-                    st.error(f"❌ Error making predictions: {str(e)}")
-    
-    else:  # Manual input
-        st.subheader("Manual Input")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            age = st.number_input("Age", min_value=18, max_value=100, value=35)
-            balance = st.number_input("Balance (€)", min_value=-10000, max_value=250000, value=1000)
-            duration = st.number_input("Call Duration (seconds)", min_value=0, max_value=5000, value=300)
-            campaign = st.number_input("Number of Contacts", min_value=1, max_value=56, value=2)
-        
-        with col2:
-            job = st.selectbox("Job Type", ['admin.', 'technician', 'services', 'management', 'retired', 'blue-collar', 'unemployed', 'entrepreneur', 'housemaid', 'unknown', 'self-employed', 'student'])
-            marital = st.selectbox("Marital Status", ['married', 'single', 'divorced', 'unknown'])
-            education = st.selectbox("Education Level", ['primary', 'secondary', 'tertiary', 'unknown'])
-            contact = st.selectbox("Contact Type", ['cellular', 'telephone', 'unknown'])
-        
-        if st.button("🔮 Make Prediction", key="predict_manual"):
-            try:
-                # Prepare data
-                input_data = {
-                    'age': age, 'job': job, 'marital': marital, 'education': education,
-                    'default': 'no', 'balance': balance, 'housing': 'yes', 'loan': 'no',
-                    'contact': contact, 'day': 1, 'month': 'jan', 'duration': duration,
-                    'campaign': campaign, 'pdays': -1, 'previous': 0, 'poutcome': 'nonexistent',
-                    'emp.var.rate': -1.1, 'cons.price.idx': 93.994, 'cons.conf.idx': -46.2,
-                    'euribor3m': 0.762, 'nr.employed': 5191.0
-                }
-                
-                input_df = pd.DataFrame([input_data])
-                
-                # Encode categorical variables
-                categorical_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'poutcome']
-                le_dict = {}
-                for col in categorical_cols:
-                    if col in input_df.columns:
-                        le = LabelEncoder()
-                        input_df[col] = le.fit_transform(input_df[col])
-                        le_dict[col] = le
-                
-                # Make prediction
-                prediction = model.predict(input_df)[0]
-                probability = model.predict_proba(input_df)[0]
-                
-                st.divider()
-                st.subheader("🎯 Prediction Result")
-                
-                if prediction == 1:
-                    st.success(f"✅ **PREDICTION: Customer will ACCEPT the campaign**")
-                    st.metric("Confidence", f"{probability[1]:.2%}")
-                else:
-                    st.warning(f"❌ **PREDICTION: Customer will REJECT the campaign**")
-                    st.metric("Confidence", f"{probability[0]:.2%}")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("P(No)", f"{probability[0]:.4f}")
-                with col2:
-                    st.metric("P(Yes)", f"{probability[1]:.4f}")
-            
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+try:
+    data = read_test_csv(contents)
+    metrics, diagnostics = evaluate_saved_model(selected_model, contents, fingerprint)
+except (ValueError, UnicodeError, csv.Error, pd.errors.ParserError, OSError, EOFError) as error:
+    st.error(f"Cannot evaluate this test CSV: {error}")
+    st.stop()
 
-# TAB 3: Model Comparison
-with tab3:
-    st.header("Model Performance Comparison")
-    
-    # Display comparison table
-    st.subheader("All Models - Metrics Comparison")
-    st.dataframe(model_results, use_container_width=True, hide_index=True)
-    
-    # Create visualizations
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Accuracy Comparison")
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.barh(model_results['Model'], model_results['Accuracy'], color='#1f77b4')
-        ax.set_xlabel('Accuracy Score')
-        ax.set_title('Model Accuracy Comparison')
-        ax.set_xlim([0, 1])
-        for i, v in enumerate(model_results['Accuracy']):
-            ax.text(v + 0.01, i, f'{v:.4f}', va='center')
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    with col2:
-        st.subheader("F1 Score Comparison")
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.barh(model_results['Model'], model_results['F1 Score'], color='#ff7f0e')
-        ax.set_xlabel('F1 Score')
-        ax.set_title('Model F1 Score Comparison')
-        ax.set_xlim([0, 1])
-        for i, v in enumerate(model_results['F1 Score']):
-            ax.text(v + 0.01, i, f'{v:.4f}', va='center')
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    st.divider()
-    
-    # Key insights
-    st.subheader("📊 Key Insights")
-    best_accuracy = model_results.loc[model_results['Accuracy'].idxmax()]
-    best_f1 = model_results.loc[model_results['F1 Score'].idxmax()]
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Best Accuracy", f"{best_accuracy['Model']}", f"{best_accuracy['Accuracy']:.4f}")
-    with col2:
-        st.metric("Best AUC", f"{model_results.loc[model_results['AUC Score'].idxmax(), 'Model']}", f"{model_results['AUC Score'].max():.4f}")
-    with col3:
-        st.metric("Best F1 Score", f"{best_f1['Model']}", f"{best_f1['F1 Score']:.4f}")
+if data["y"].nunique() != 2:
+    st.warning("AUC is undefined because this CSV has only one target class; it is shown as N/A.")
+if diagnostics["predicted_yes"] == 0:
+    st.warning("This model predicted no positive cases. Positive-class precision is recorded as 0.")
+if not data["y"].eq("yes").any():
+    st.warning("There are no actual positive cases. Positive-class recall and F1 are recorded as 0.")
+encoder = load_model(selected_model, fingerprint).named_steps["preprocessing"].named_transformers_[
+    "categorical"
+]
+unseen = [
+    column for column, categories in zip(CATEGORICAL_FEATURES, encoder.categories_)
+    if not data[column].isin(categories).all()
+]
+if unseen:
+    st.warning(
+        f"Unseen categories in {', '.join(unseen)} use the saved encoder's all-zero representation."
+    )
+
+overview = st.columns(3)
+overview[0].metric("Test records", f"{len(data):,}")
+overview[1].metric("Actual subscriptions", int(data["y"].eq("yes").sum()))
+overview[2].metric("Always-no baseline accuracy", f"{data['y'].eq('no').mean():.4f}")
+evaluation_tab, comparison_tab, details_tab = st.tabs(
+    ["Selected model", "Compare all five", "Dataset and method"]
+)
+
+with evaluation_tab:
+    st.subheader(f"{selected_model}: results on current test CSV")
+    cards = st.columns(3)
+    for index, (label, value) in enumerate(metrics.items()):
+        cards[index % 3].metric(label, "N/A" if value is None else f"{value:.4f}")
+    st.caption("Precision, recall and F1 refer to subscriptions (yes). MCC ranges from -1 to 1.")
+    matrix = diagnostics["confusion_matrix"]
+    st.subheader("Confusion matrix")
+    figure, axis = plt.subplots(figsize=(5, 4))
+    axis.imshow(matrix, cmap="Blues")
+    for row in range(2):
+        for column in range(2):
+            axis.text(column, row, str(matrix[row][column]), ha="center", va="center",
+                      color="black", bbox={"facecolor": "white", "alpha": 0.8})
+    axis.set_xticks([0, 1], labels=["no", "yes"])
+    axis.set_yticks([0, 1], labels=["no", "yes"])
+    axis.set_xlabel("Predicted")
+    axis.set_ylabel("Actual")
+    figure.tight_layout()
+    st.pyplot(figure)
+    plt.close(figure)
+    st.subheader("Classification report")
+    report = diagnostics["classification_report"]
+    st.dataframe(
+        pd.DataFrame({key: report[key] for key in ["no", "yes", "macro avg", "weighted avg"]}).T,
+        width="stretch",
+    )
+    with st.expander("Test records and predictions"):
+        preview = data.head(100).copy()
+        model = load_model(selected_model, fingerprint)
+        preview["prediction"] = pd.Series(
+            model.predict(preview[FEATURES]), index=preview.index,
+        ).map({0: "no", 1: "yes"})
+        st.dataframe(preview, width="stretch", hide_index=True)
+        st.caption("Preview is limited to 100 rows; all metrics above use the entire test CSV.")
+
+with comparison_tab:
+    st.subheader("Same test data, five saved classifiers")
+    rows = []
+    try:
+        for name in MODEL_FILES:
+            model_metrics, _ = evaluate_saved_model(name, contents, fingerprint)
+            rows.append({"Model": name, **model_metrics})
+    except (ValueError, OSError, EOFError) as error:
+        st.error(f"Cannot compare saved models: {error}")
+        st.stop()
+    comparison = pd.DataFrame(rows)
+    st.dataframe(comparison, width="stretch", hide_index=True)
+    chart, chart_axis = plt.subplots(figsize=(8, 4))
+    comparison.set_index("Model")[["F1 Score", "Recall", "Precision"]].plot.barh(
+        ax=chart_axis,
+    )
+    chart_axis.set_xlim(0, 1)
+    chart_axis.set_xlabel("Score")
+    chart.tight_layout()
+    st.pyplot(chart)
+    plt.close(chart)
+    winner = comparison.loc[comparison["F1 Score"].idxmax(), "Model"]
+    st.write(f"Highest F1 on this CSV: **{winner}** (first listed model breaks ties).")
+    st.caption("This is a descriptive comparison, not hyperparameter tuning on test data.")
+    st.download_button(
+        "Download current evaluation metrics", comparison.to_csv(index=False),
+        "evaluation_metrics.csv", mime="text/csv",
+    )
+
+with details_tab:
+    st.markdown(
+        "Source: [UCI Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing), "
+        "additional-full variant: 41,188 rows, 20 features. The included test CSV has "
+        "8,238 rows excluded from model fitting. Numeric scaling and one-hot encoding "
+        "are fitted on training data and saved inside each pipeline."
+    )
+    st.write("Required CSV columns:", FEATURES + ["y"])
+    st.caption(
+        "UTF-8, comma-separated CSV; no missing values, duplicate/extra columns or non-finite "
+        "numeric values. Targets are no/yes. Up to 10 MiB and 10,000 test rows. "
+        "Unknown categories are accepted with an explicit warning."
+    )
+    st.write(
+        "AUC uses P(yes) for four models and uncalibrated decision scores for SVM. "
+        "Single-class AUC is N/A. Undefined precision/recall/F1 is 0. "
+        "The random stratified split is a coursework comparison, not a future-time validation."
+    )
+    st.caption(f"Training Python version: {summary['python_version']}; random seed: 42.")
 
 st.divider()
-st.markdown("---")
-st.markdown("""
-    <div style='text-align: center; color: #666; font-size: 12px;'>
-    <p>🏦 Bank Marketing Classification Model | BITS Pilani M.Tech AIML Assignment</p>
-    <p>All models trained on Bank Marketing dataset with 5,000 samples and 20 features</p>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown("[GitHub repository](https://github.com/rashokkumartce/bank-marketing-classifier)")

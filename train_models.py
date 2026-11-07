@@ -14,10 +14,6 @@ import pandas as pd
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    accuracy_score, classification_report, confusion_matrix, f1_score,
-    matthews_corrcoef, precision_score, recall_score, roc_auc_score,
-)
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
@@ -27,47 +23,10 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 
 from download_data import FEATURES, SOURCE_URL
+from evaluation import CATEGORICAL_FEATURES, NUMERIC_FEATURES, MODEL_FILES, evaluate_model
 
 
 SEED = 42
-CATEGORICAL_FEATURES = [
-    "job", "marital", "education", "default", "housing", "loan", "contact",
-    "month", "day_of_week", "poutcome",
-]
-NUMERIC_FEATURES = [name for name in FEATURES if name not in CATEGORICAL_FEATURES]
-MODEL_FILES = {
-    "Logistic Regression": "logistic_regression.joblib",
-    "Decision Tree": "decision_tree.joblib",
-    "KNN": "knn.joblib",
-    "Naive Bayes": "naive_bayes.joblib",
-    "SVM": "svm.joblib",
-}
-
-
-def evaluate_model(model, features, target):
-    predictions = model.predict(features)
-    if hasattr(model, "predict_proba"):
-        positive_index = list(model.classes_).index(1)
-        scores = model.predict_proba(features)[:, positive_index]
-    else:
-        scores = model.decision_function(features)
-    metrics = {
-        "Accuracy": accuracy_score(target, predictions),
-        "AUC Score": roc_auc_score(target, scores),
-        "Precision": precision_score(target, predictions, zero_division=0),
-        "Recall": recall_score(target, predictions, zero_division=0),
-        "F1 Score": f1_score(target, predictions, zero_division=0),
-        "MCC": matthews_corrcoef(target, predictions),
-    }
-    diagnostics = {
-        "confusion_matrix": confusion_matrix(target, predictions, labels=[0, 1]).tolist(),
-        "classification_report": classification_report(
-            target, predictions, labels=[0, 1], target_names=["no", "yes"],
-            output_dict=True, zero_division=0,
-        ),
-        "predicted_yes": int(np.sum(predictions == 1)),
-    }
-    return metrics, diagnostics
 
 
 def train_models(data_path, output_dir):
@@ -172,7 +131,7 @@ def train_models(data_path, output_dir):
     )
     print("\n" + results_table.to_string(index=False), flush=True)
     print(f"\nSaved five pipelines, held-out CSV and results to {output_dir.resolve()}", flush=True)
-    print("The old Streamlit app must be corrected before using these new pipelines.", flush=True)
+    print("Run the application with: python -m streamlit run app.py", flush=True)
 
 
 if __name__ == "__main__":
