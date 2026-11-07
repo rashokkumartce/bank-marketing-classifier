@@ -3,8 +3,8 @@
 BITS Pilani WILP M.Tech (AIML), Machine Learning Assignment 2.
 Deadline: **8 November 2026, 23:59 IST**. Total: **15 marks**.
 
-Development and local validation are complete. Live deployment, final BITS lab
-execution evidence and the single submission PDF remain to be completed.
+Development, local validation and Streamlit Community Cloud deployment are complete.
+Final BITS lab execution evidence and the single submission PDF remain to be completed.
 Earlier synthetic data and its model results have been replaced. Current saved
 artifacts were regenerated locally; their provenance is recorded in
 [training_summary.json](training_summary.json). They must not be represented as
@@ -62,8 +62,12 @@ demonstrations, not a validated production marketing system.
 
 [https://github.com/rashokkumartce/bank-marketing-classifier](https://github.com/rashokkumartce/bank-marketing-classifier)
 
-**Live Streamlit link:** pending deployment. Replace this text with the actual
-tested `https://...streamlit.app` URL before submission.
+**Live Streamlit link:** [Bank Campaign Model Lab](https://bank-marketing-classifier-e4hynxcw74m8cyjc9gtkzn.streamlit.app/)
+
+Live checks verified the included test data, an actual labeled CSV upload,
+all-five comparison, model switching, six metrics, confusion matrix and
+classification report. The uploaded CSV produced the expected KNN metrics
+(accuracy 0.9101, F1 0.5024), with no application exceptions.
 
 ## d. Models used and evaluation
 
