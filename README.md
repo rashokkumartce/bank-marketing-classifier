@@ -1,5 +1,32 @@
 # 🏦 Bank Marketing Classification Model
 
+> **Correction in progress:** The previous dataset and saved models use synthetic
+> data, not UCI data. The results and completion statements below are obsolete
+> and must not be used for submission until retraining and application fixes
+> are complete.
+
+## Downloading the genuine dataset
+
+Run in the activated Python environment on BITS Virtual Lab:
+
+```bash
+python download_data.py
+```
+
+The script downloads the official [UCI Bank Marketing archive](https://archive.ics.uci.edu/dataset/222/bank+marketing),
+selects `bank-additional-full.csv`, validates 41,188 rows and 20 input features,
+and saves a comma-separated copy to `data/bank_additional_full.csv`.
+The target is `y`: 36,548 `no` and 4,640 `yes` values.
+Raw training data is excluded from Git; a held-out test CSV will be generated
+by the corrected training script. This download needs only Python's standard library.
+Errors stop execution; no synthetic fallback is used.
+
+This variant differs from the earlier synthetic schema: it has `day_of_week`
+and does not have `balance` or `day`. Existing models cannot be reused.
+The `unknown` category is present in several columns. Also, `duration` is
+known only after the call ends; any model using it is a post-call analysis
+model, not a pre-call targeting model.
+
 ## Project Overview
 
 This project implements a comprehensive machine learning solution for binary classification on the Bank Marketing dataset. The project demonstrates the development, evaluation, and deployment of five different classification algorithms with interactive web-based prediction capabilities.
