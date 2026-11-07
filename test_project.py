@@ -87,6 +87,11 @@ class ArtifactTests(unittest.TestCase):
         for name, expected in self.summary["package_versions"].items():
             self.assertEqual(version(name), expected)
 
+    def test_arrow_numpy_dataframe_compatibility(self):
+        import pyarrow as pa
+        frame = self.data.head(5)
+        pd.testing.assert_frame_equal(pa.Table.from_pandas(frame).to_pandas(), frame)
+
     def test_all_models_reproduce_saved_metrics_without_fit(self):
         for name, model in self.models.items():
             with self.subTest(model=name), patch.object(

@@ -211,14 +211,18 @@ MCC follows scikit-learn's zero convention when its denominator is zero.
 
 ### Development validation
 
-Fourteen regression tests cover all five models, serialized artifact metrics,
+Fifteen regression tests cover all five models, serialized artifact metrics,
 train/test separation, unseen categories, single-class AUC, CSV errors,
-model switching and actual uploaded-data evaluation. All passed locally with
-runtime numerical warnings treated as errors. `pip check` passed.
+model switching, Arrow/NumPy compatibility and actual uploaded-data evaluation.
+The original fourteen passed locally with runtime numerical warnings treated
+as errors. After pinning Arrow, its compatibility check and the four UI tests
+also passed locally. `pip check` passed.
 An actual browser CSV upload and all-five comparison were also exercised.
 These are local checks, not a claim that live deployment or final lab evidence
 is complete. The corrected NumPy pin is 1.26.4; NumPy 2.0.2 produced numerical
 warnings on the local macOS runtime, so artifacts were regenerated with 1.26.4.
+PyArrow is pinned to 21.0.0: an unpinned newer release installed in the Linux
+lab required NumPy 2 and prevented Streamlit tables from rendering.
 
 ## Deployment and submission
 
